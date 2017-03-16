@@ -8,7 +8,7 @@ import (
 )
 
 type mongoDBCRMechanism struct {
-	nConvos  uint32
+	nConvos  int
 	username string
 	password string
 
@@ -23,7 +23,7 @@ func (m *mongoDBCRMechanism) Next(challenge []byte) ([]byte, error) {
 		return nil, nil
 	case 2:
 		// read nonces
-		i := uint32(0)
+		i := 0
 		resp := []byte{}
 		for i < m.nConvos && len(challenge) > 0 {
 			nonceEnd := bytes.IndexByte(challenge, 0)

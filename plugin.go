@@ -46,7 +46,7 @@ func (p *plugin) Next(challenge []byte) ([]byte, error) {
 	}
 
 	defaultMechName := string(challenge[:mechEnd])
-	nConvos := bytesToUint32(challenge[mechEnd+1 : mechEnd+5])
+	nConvos := int(bytesToUint32(challenge[mechEnd+1 : mechEnd+5]))
 
 	username, mechName, err := p.parseUsername()
 	if err != nil {
@@ -65,10 +65,24 @@ func (p *plugin) Next(challenge []byte) ([]byte, error) {
 			password: p.cfg.Passwd,
 		}
 
-		return p.mech.Next(nil)
+	case "SCRAM-SHA-1":
+		p.mech = &saslMechanism{
+			nConvos:  nConvos,
+			username: username,
+			password: p.cfg.Passwd,
+
+			clientFactory: func(username, password string) saslClient {
+				return &scramSaslClient{
+					username: username,
+					password: password,
+				}
+			},
+		}
 	default:
 		return nil, fmt.Errorf("unsupported mechanism: %s", mechName)
 	}
+
+	return p.mech.Next(nil)
 }
 
 func (p *plugin) parseUsername() (username string, mechanism string, err error) {
