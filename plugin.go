@@ -58,16 +58,29 @@ func (p *plugin) Next(challenge []byte) ([]byte, error) {
 	}
 
 	switch mechName {
+	case "GSSAPI":
+		p.mech = &saslMechanism{
+			nConvos:  nConvos,
+			username: username,
+			cfg:      p.cfg,
+
+			clientFactory: func(username string, cfg *mysql.Config) saslClient {
+				return &plainSaslClient{
+					username: username,
+					password: cfg.Passwd,
+				}
+			},
+		}
 	case "SCRAM-SHA-1":
 		p.mech = &saslMechanism{
 			nConvos:  nConvos,
 			username: username,
-			password: p.cfg.Passwd,
+			cfg:      p.cfg,
 
-			clientFactory: func(username, password string) saslClient {
+			clientFactory: func(username string, cfg *mysql.Config) saslClient {
 				return &scramSaslClient{
 					username: username,
-					password: password,
+					password: cfg.Passwd,
 				}
 			},
 		}
@@ -75,12 +88,12 @@ func (p *plugin) Next(challenge []byte) ([]byte, error) {
 		p.mech = &saslMechanism{
 			nConvos:  nConvos,
 			username: username,
-			password: p.cfg.Passwd,
+			cfg:      p.cfg,
 
-			clientFactory: func(username, password string) saslClient {
+			clientFactory: func(username string, cfg *mysql.Config) saslClient {
 				return &plainSaslClient{
 					username: username,
-					password: password,
+					password: cfg.Passwd,
 				}
 			},
 		}

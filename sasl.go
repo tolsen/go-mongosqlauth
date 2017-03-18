@@ -1,10 +1,13 @@
 package mongosqlauth
 
+import "github.com/go-sql-driver/mysql"
+
 type saslMechanism struct {
-	nConvos       int
-	username      string
-	password      string
-	clientFactory func(username, password string) saslClient
+	nConvos  int
+	username string
+	cfg      *mysql.Config
+
+	clientFactory func(username string, cfg *mysql.Config) saslClient
 
 	clients []saslClient
 }
@@ -17,7 +20,7 @@ func (m *saslMechanism) Next(challenge []byte) ([]byte, error) {
 		// first time through
 
 		for i := 0; i < m.nConvos; i++ {
-			client := m.clientFactory(m.username, m.password)
+			client := m.clientFactory(m.username, m.cfg)
 			m.clients = append(m.clients, client)
 
 			payload, err := client.Start()
