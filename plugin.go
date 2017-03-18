@@ -58,13 +58,6 @@ func (p *plugin) Next(challenge []byte) ([]byte, error) {
 	}
 
 	switch mechName {
-	case "MONGODB-CR":
-		p.mech = &mongoDBCRMechanism{
-			nConvos:  nConvos,
-			username: username,
-			password: p.cfg.Passwd,
-		}
-
 	case "SCRAM-SHA-1":
 		p.mech = &saslMechanism{
 			nConvos:  nConvos,
@@ -73,6 +66,19 @@ func (p *plugin) Next(challenge []byte) ([]byte, error) {
 
 			clientFactory: func(username, password string) saslClient {
 				return &scramSaslClient{
+					username: username,
+					password: password,
+				}
+			},
+		}
+	case "PLAIN":
+		p.mech = &saslMechanism{
+			nConvos:  nConvos,
+			username: username,
+			password: p.cfg.Passwd,
+
+			clientFactory: func(username, password string) saslClient {
+				return &plainSaslClient{
 					username: username,
 					password: password,
 				}
