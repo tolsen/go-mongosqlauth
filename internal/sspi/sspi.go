@@ -14,7 +14,7 @@ import (
 )
 
 // New creates a new SaslSaslClient.
-func New(target string, username, password string, passwordSet bool, props map[string]string) (*SaslClient, error) {
+func New(address string, username, password string, passwordSet bool, props map[string]string) (*SaslClient, error) {
 
 	var err error
 	serviceName := "mongodb"
@@ -37,7 +37,7 @@ func New(target string, username, password string, passwordSet bool, props map[s
 	}
 
 	return &SaslClient{
-		target:               target,
+		address:              address,
 		serviceName:          serviceName,
 		canonicalizeHostName: canonicalizeHostName,
 		serviceRealm:         serviceRealm,
@@ -48,7 +48,7 @@ func New(target string, username, password string, passwordSet bool, props map[s
 }
 
 type SaslClient struct {
-	target               string
+	address              string
 	serviceName          string
 	serviceRealm         string
 	canonicalizeHostName bool
@@ -79,9 +79,9 @@ func (sc *SaslClient) init() error {
 		return initError
 	}
 
-	hostname, _, err := net.SplitHostPort(string(sc.target))
+	hostname, _, err := net.SplitHostPort(string(sc.address))
 	if err != nil {
-		return fmt.Errorf("invalid target (%s) specified: %s", sc.target, err)
+		return fmt.Errorf("invalid target (%s) specified: %s", sc.address, err)
 	}
 	if sc.canonicalizeHostName {
 		names, err := net.LookupAddr(hostname)

@@ -27,84 +27,80 @@ type mechanism interface {
 	Next([]byte) ([]byte, error)
 }
 
+var emptyChallenge = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+
 func (p *plugin) Next(challenge []byte) ([]byte, error) {
 
 	if p.mech != nil {
 		return p.mech.Next(challenge)
 	}
 
-	// first challenge will include the default mechanism and the number of conversations
-	// to have.
-
-	if len(challenge) == 0 {
-		return nil, fmt.Errorf("invalid auth response: empty")
+	if len(challenge) == 20 && bytes.Equal(challenge, emptyChallenge) {
+		// first time through the challenge will be 21 bytes of all NUL
+		return nil, nil
 	}
 
+	// second time through, challenge will include the mechanism to use along with mechanism
+	// specific information.
 	mechEnd := bytes.IndexByte(challenge, 0)
 	if mechEnd == -1 {
 		return nil, fmt.Errorf("invalid auth response: not null terminator found")
 	}
 
-	defaultMechName := string(challenge[:mechEnd])
+	pos := 0
+	mechanism := string(challenge[:mechEnd])
+	pos = mechEnd + 1
 	nConvos := int(bytesToUint32(challenge[mechEnd+1 : mechEnd+5]))
+	pos += 4
 
-	username, mechName, err := p.parseUsername()
+	username, err := p.parseUsername()
 	if err != nil {
 		return nil, err
 	}
 
-	if mechName == "" {
-		mechName = defaultMechName
-	}
-
-	switch mechName {
+	switch mechanism {
 	case "GSSAPI":
+		// GSSAPI includes an additional NUL-terminated address
+		addressEnd := bytes.IndexByte(challenge[pos:], 0)
+		address := string(challenge[pos : pos+addressEnd])
+		pos += addressEnd + 1
 		p.mech = &saslMechanism{
-			nConvos:  nConvos,
-			username: username,
-			cfg:      p.cfg,
+			nConvos: nConvos,
 
-			clientFactory: func(username string, cfg *mysql.Config) saslClient {
-				return &plainSaslClient{
-					username: username,
-					password: cfg.Passwd,
-				}
+			clientFactory: func() saslClient {
+				return gssapiClientFactory(address, username, p.cfg)
 			},
 		}
 	case "SCRAM-SHA-1":
 		p.mech = &saslMechanism{
-			nConvos:  nConvos,
-			username: username,
-			cfg:      p.cfg,
+			nConvos: nConvos,
 
-			clientFactory: func(username string, cfg *mysql.Config) saslClient {
+			clientFactory: func() saslClient {
 				return &scramSaslClient{
 					username: username,
-					password: cfg.Passwd,
+					password: p.cfg.Passwd,
 				}
 			},
 		}
 	case "PLAIN":
 		p.mech = &saslMechanism{
-			nConvos:  nConvos,
-			username: username,
-			cfg:      p.cfg,
+			nConvos: nConvos,
 
-			clientFactory: func(username string, cfg *mysql.Config) saslClient {
+			clientFactory: func() saslClient {
 				return &plainSaslClient{
 					username: username,
-					password: cfg.Passwd,
+					password: p.cfg.Passwd,
 				}
 			},
 		}
 	default:
-		return nil, fmt.Errorf("unsupported mechanism: %s", mechName)
+		return nil, fmt.Errorf("unsupported mechanism: %s", mechanism)
 	}
 
 	return p.mech.Next(nil)
 }
 
-func (p *plugin) parseUsername() (username string, mechanism string, err error) {
+func (p *plugin) parseUsername() (username string, err error) {
 	username = p.cfg.User
 
 	// parse user for extra information other than just the username
@@ -112,21 +108,7 @@ func (p *plugin) parseUsername() (username string, mechanism string, err error) 
 	// as a query string, so everything should be url encoded.
 	idx := strings.Index(username, "?")
 	if idx > 0 {
-		username, err = url.QueryUnescape(p.cfg.User[:idx])
-		if err != nil {
-			return
-		}
-		var values url.Values
-		values, err = url.ParseQuery(p.cfg.User[idx+1:])
-		if err != nil {
-			return
-		}
-		for key, value := range values {
-			switch strings.ToLower(key) {
-			case "mechanism":
-				mechanism = value[0]
-			}
-		}
+		return url.QueryUnescape(p.cfg.User[:idx])
 	}
 
 	return

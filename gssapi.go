@@ -4,6 +4,6 @@ package mongosqlauth
 
 import "github.com/go-sql-driver/mysql"
 
-func gssapiClientFactory(username string, cfg *mysql.Config) saslClient {
+func gssapiClientFactory(address string, username string, cfg *mysql.Config) saslClient {
 	panic("GSSAPI support not enabled during build (-tags gssapi)")
 }
