@@ -20,14 +20,15 @@ type plugin struct {
 	cfg *mysql.Config
 
 	// state
-	mech mechanism
+	initiated bool
+	mech      mechanism
 }
 
 type mechanism interface {
 	Next([]byte) ([]byte, error)
 }
 
-var emptyChallenge = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+func (m *plugin) Close() {}
 
 func (p *plugin) Next(challenge []byte) ([]byte, error) {
 
@@ -35,8 +36,13 @@ func (p *plugin) Next(challenge []byte) ([]byte, error) {
 		return p.mech.Next(challenge)
 	}
 
-	if len(challenge) == 20 && bytes.Equal(challenge, emptyChallenge) {
-		// first time through the challenge will be 21 bytes of all NUL
+	if !p.initiated {
+		// first time through, challenge will include
+		// plugin version in the first 2 bytes.
+		if challenge[0] != 1 {
+			return nil, fmt.Errorf("only mongosql_auth plugin version 1.x is supported")
+		}
+		p.initiated = true
 		return nil, nil
 	}
 
