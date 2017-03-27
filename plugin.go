@@ -55,7 +55,7 @@ func (p *plugin) Next(challenge []byte) ([]byte, error) {
 
 	pos := 0
 	mechanism := string(challenge[:mechEnd])
-	pos = mechEnd + 1
+	pos += mechEnd + 1
 	nConvos := int(bytesToUint32(challenge[mechEnd+1 : mechEnd+5]))
 	pos += 4
 
@@ -66,15 +66,11 @@ func (p *plugin) Next(challenge []byte) ([]byte, error) {
 
 	switch mechanism {
 	case "GSSAPI":
-		// GSSAPI includes an additional NUL-terminated address
-		addressEnd := bytes.IndexByte(challenge[pos:], 0)
-		address := string(challenge[pos : pos+addressEnd])
-		pos += addressEnd + 1
 		p.mech = &saslMechanism{
 			nConvos: nConvos,
 
 			clientFactory: func() saslClient {
-				return gssapiClientFactory(address, username, p.cfg)
+				return gssapiClientFactory(username, p.cfg)
 			},
 		}
 	case "SCRAM-SHA-1":

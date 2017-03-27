@@ -9,7 +9,7 @@ import (
 )
 
 func TestScramSha1(t *testing.T) {
-	db, err := sql.Open("mysql", "root?source=test&mechanism=SCRAM-SHA-1:test@tcp(localhost:3307)/test")
+	db, err := sql.Open("mysql", "blah")
 	if err != nil {
 		t.Fatalf("unable to connect")
 	}

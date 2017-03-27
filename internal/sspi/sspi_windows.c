@@ -82,7 +82,7 @@ SECURITY_STATUS SEC_ENTRY sspi_initialize_security_context(CredHandle *cred_hand
 	SECURITY_STATUS status = call_sspi_initialize_security_context(cred_handle,
 	          has_context > 0 ? context : NULL,
 	          (LPSTR) spn,
-	          ISC_REQ_ALLOCATE_MEMORY | ISC_REQ_MUTUAL_AUTH,
+	          ISC_REQ_ALLOCATE_MEMORY | ISC_REQ_MUTUAL_AUTH | ISC_REQ_DELEGATE,
 	          0,
 	          SECURITY_NETWORK_DREP,
 	          has_context > 0 ? &inbuf : NULL,

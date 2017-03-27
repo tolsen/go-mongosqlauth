@@ -6,41 +6,14 @@ package sspi
 import "C"
 import (
 	"fmt"
-	"net"
-	"strconv"
-	"strings"
 	"sync"
 	"unsafe"
 )
 
 // New creates a new SaslSaslClient.
-func New(address string, username, password string, passwordSet bool, props map[string]string) (*SaslClient, error) {
-
-	var err error
-	serviceName := "mongodb"
-	serviceRealm := ""
-	canonicalizeHostName := false
-
-	for key, value := range props {
-		switch strings.ToUpper(key) {
-		case "CANONICALIZE_HOST_NAME":
-			canonicalizeHostName, err = strconv.ParseBool(value)
-			if err != nil {
-				return nil, fmt.Errorf("%s must be a boolean (true, false, 0, 1) but got '%s'", key, value)
-			}
-
-		case "SERVICE_REALM":
-			serviceRealm = value
-		case "SERVICE_NAME":
-			serviceName = value
-		}
-	}
-
+func New(spn string, username, password string, passwordSet bool) (*SaslClient, error) {
 	return &SaslClient{
-		address:              address,
-		serviceName:          serviceName,
-		canonicalizeHostName: canonicalizeHostName,
-		serviceRealm:         serviceRealm,
+		servicePrincipalName: spn,
 		username:             username,
 		password:             password,
 		passwordSet:          passwordSet,
@@ -48,21 +21,17 @@ func New(address string, username, password string, passwordSet bool, props map[
 }
 
 type SaslClient struct {
-	address              string
-	serviceName          string
-	serviceRealm         string
-	canonicalizeHostName bool
+	servicePrincipalName string
 	username             string
 	password             string
 	passwordSet          bool
 
 	// state
-	servicePrincipalName string
-	credHandle           C.CredHandle
-	context              C.CtxtHandle
-	hasContext           C.int
-	contextComplete      bool
-	done                 bool
+	credHandle      C.CredHandle
+	context         C.CtxtHandle
+	hasContext      C.int
+	contextComplete bool
+	done            bool
 }
 
 func (sc *SaslClient) Close() {
@@ -77,26 +46,6 @@ func (sc *SaslClient) init() error {
 	initOnce.Do(initSSPI)
 	if initError != nil {
 		return initError
-	}
-
-	hostname, _, err := net.SplitHostPort(string(sc.address))
-	if err != nil {
-		return fmt.Errorf("invalid target (%s) specified: %s", sc.address, err)
-	}
-	if sc.canonicalizeHostName {
-		names, err := net.LookupAddr(hostname)
-		if err != nil || len(names) == 0 {
-			return fmt.Errorf("unable to canonicalize host name: %s", err)
-		}
-		hostname = names[0]
-		if hostname[len(hostname)-1] == '.' {
-			hostname = hostname[:len(hostname)-1]
-		}
-	}
-
-	sc.servicePrincipalName = fmt.Sprintf("%s/%s", sc.serviceName, hostname)
-	if sc.serviceRealm != "" {
-		sc.servicePrincipalName += "@" + sc.serviceRealm
 	}
 
 	return nil
@@ -135,7 +84,7 @@ func (sc *SaslClient) Start() ([]byte, error) {
 		sc.username = C.GoString((*C.char)(unsafe.Pointer(outName)))
 	}
 
-	return []byte{}, nil
+	return sc.Next(nil)
 }
 
 func (sc *SaslClient) Next(challenge []byte) ([]byte, error) {
