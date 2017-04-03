@@ -10,8 +10,8 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-var host = flag.String("host", "localhost:27017", "")
-var user = flag.String("user", "", "")
+var host = flag.String("host", "host1.mongodb.org:3307", "")
+var user = flag.String("user", "mongosqlusr%40MONGODB.ORG?mechanism=GSSAPI", "")
 var pwd = flag.String("pwd", "", "")
 
 func main() {
@@ -19,10 +19,10 @@ func main() {
 	flag.Parse()
 
 	var cs string
-	if *pwd != "" {
-		cs = fmt.Sprintf("%s:%s@tcp(%s)/test", *user, *pwd, *host)
+	if *pwd == "" {
+		cs = fmt.Sprintf("%s@tcp(%s)/test", *user, *host)
 	} else {
-		cs = fmt.Sprintf("tcp(%s)/test", *host)
+		cs = fmt.Sprintf("%s:%s@tcp(%s)/test", *user, *pwd, *host)
 	}
 
 	fmt.Println("connecting to", cs)
