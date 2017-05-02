@@ -7,9 +7,9 @@ type plainSaslClient struct {
 	password string
 }
 
-func (c *plainSaslClient) Start() ([]byte, error) {
+func (c *plainSaslClient) Start() (string, []byte, error) {
 	b := []byte("\x00" + c.username + "\x00" + c.password)
-	return b, nil
+	return "PLAIN", b, nil
 }
 
 func (c *plainSaslClient) Next(challenge []byte) ([]byte, error) {

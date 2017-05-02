@@ -1,19 +1,45 @@
 //+build gssapi,windows
 
-package sspi
+package gssapi
 
-// #include "sspi_windows.h"
+// #include "sspi_wrapper.h"
 import "C"
 import (
 	"fmt"
+	"net"
 	"sync"
 	"unsafe"
 )
 
-// New creates a new SaslSaslClient.
-func New(spn string, username, password string, passwordSet bool) (*SaslClient, error) {
+// New creates a new SaslClient.
+func New(target, username, password string, passwordSet bool, serviceName string, canonicalizeHostName bool, serviceRealm string) (*SaslClient, error) {
+	initOnce.Do(initSSPI)
+	if initError != nil {
+		return nil, initError
+	}
+
+	hostname, _, err := net.SplitHostPort(target)
+	if err != nil {
+		return nil, fmt.Errorf("invalid endpoint (%s) specified: %s", target, err)
+	}
+	if canonicalizeHostName {
+		names, err := net.LookupAddr(hostname)
+		if err != nil || len(names) == 0 {
+			return nil, fmt.Errorf("unable to canonicalize hostname: %s", err)
+		}
+		hostname = names[0]
+		if hostname[len(hostname)-1] == '.' {
+			hostname = hostname[:len(hostname)-1]
+		}
+	}
+
+	servicePrincipalName := fmt.Sprintf("%s/%s", serviceName, hostname)
+	if serviceRealm != "" {
+		servicePrincipalName += "@" + serviceRealm
+	}
+
 	return &SaslClient{
-		servicePrincipalName: spn,
+		servicePrincipalName: servicePrincipalName,
 		username:             username,
 		password:             password,
 		passwordSet:          passwordSet,
@@ -27,64 +53,33 @@ type SaslClient struct {
 	passwordSet          bool
 
 	// state
-	credHandle      C.CredHandle
-	context         C.CtxtHandle
-	hasContext      C.int
+	state           C.sspi_client_state
 	contextComplete bool
 	done            bool
 }
 
 func (sc *SaslClient) Close() {
-	if sc.hasContext > 0 {
-		C.sspi_delete_security_context(&sc.context)
-	}
-
-	C.sspi_free_credentials_handle(&sc.credHandle)
+	C.sspi_client_destroy(&sc.state)
 }
 
-func (sc *SaslClient) init() error {
-	initOnce.Do(initSSPI)
-	if initError != nil {
-		return initError
-	}
+func (sc *SaslClient) Start() (string, []byte, error) {
+	const mechName = "GSSAPI"
 
-	return nil
-}
-
-func (sc *SaslClient) Start() ([]byte, error) {
-
-	err := sc.init()
-	if err != nil {
-		return nil, err
-	}
-
-	var status C.SECURITY_STATUS
+	var cusername *C.char
+	var cpassword *C.char
 	if sc.passwordSet {
-		cusername := C.CString(sc.username)
+		cusername = C.CString(sc.username)
 		defer C.free(unsafe.Pointer(cusername))
-		cpassword := C.CString(sc.password)
+		cpassword = C.CString(sc.password)
 		defer C.free(unsafe.Pointer(cpassword))
-		status = C.sspi_acquire_credentials_handle(&sc.credHandle, cusername, cpassword)
-	} else {
-		status = C.sspi_acquire_default_credentials_handle(&sc.credHandle)
+	}
+	status := C.sspi_client_init(&sc.state, cusername, cpassword)
+
+	if status != C.SSPI_OK {
+		return mechName, nil, fmt.Errorf("unable to intitialize sspi client state: %s", statusMessage(sc.state.status))
 	}
 
-	if status != C.SEC_E_OK {
-		return nil, fmt.Errorf("failed to acquire credentials handle: %s", statusMessage(status))
-	}
-
-	if sc.username == "" {
-		var outName *C.char
-		status = C.sspi_get_cred_name(&sc.credHandle, &outName)
-		if status != C.SEC_E_OK {
-			return nil, fmt.Errorf("failed to query credential attributes for name: %s", statusMessage(status))
-		}
-		defer C.free(unsafe.Pointer(outName))
-
-		sc.username = C.GoString((*C.char)(unsafe.Pointer(outName)))
-	}
-
-	return sc.Next(nil)
+	return mechName, nil, nil
 }
 
 func (sc *SaslClient) Next(challenge []byte) ([]byte, error) {
@@ -92,17 +87,30 @@ func (sc *SaslClient) Next(challenge []byte) ([]byte, error) {
 	var outBuf C.PVOID
 	var outBufLen C.ULONG
 
-	var status C.SECURITY_STATUS
 	if sc.contextComplete {
-		cusername := C.CString(sc.username)
-		defer C.free(unsafe.Pointer(cusername))
-		status = C.sspi_send_client_authz_id(&sc.context, &outBuf, &outBufLen, cusername)
-		if status != C.SEC_E_OK {
-			return nil, fmt.Errorf("failed to send SaslClient authz id: %s", statusMessage(status))
+		fmt.Println("HERE2")
+
+		if sc.username == "" {
+			var cusername *C.char
+			status := C.sspi_client_get_username(&sc.state, &cusername)
+			if status != C.SSPI_OK {
+				return nil, fmt.Errorf("unable to acquire username: %v", statusMessage(sc.state.status))
+			}
+			defer C.free(unsafe.Pointer(cusername))
+			sc.username = C.GoString((*C.char)(unsafe.Pointer(cusername)))
+		}
+
+		bytes := append([]byte{1, 0, 0, 0}, []byte(sc.username)...)
+		buf := (C.PVOID)(unsafe.Pointer(&bytes[0]))
+		bufLen := C.ULONG(len(bytes))
+		status := C.sspi_client_wrap_msg(&sc.state, buf, bufLen, &outBuf, &outBufLen)
+		if status != C.SSPI_OK {
+			return nil, fmt.Errorf("unable to wrap authz: %v", statusMessage(sc.state.status))
 		}
 
 		sc.done = true
 	} else {
+		fmt.Println("HERE1")
 		var buf C.PVOID
 		var bufLen C.ULONG
 		if len(challenge) > 0 {
@@ -111,14 +119,14 @@ func (sc *SaslClient) Next(challenge []byte) ([]byte, error) {
 		}
 		cservicePrincipalName := C.CString(sc.servicePrincipalName)
 		defer C.free(unsafe.Pointer(cservicePrincipalName))
-		status = C.sspi_initialize_security_context(&sc.credHandle, sc.hasContext, &sc.context, buf, bufLen, &outBuf, &outBufLen, cservicePrincipalName)
-		sc.hasContext = 1
+
+		status := C.sspi_init_sec_context(&sc.state, cservicePrincipalName, buf, bufLen, &outBuf, &outBufLen)
 		switch status {
-		case C.SEC_E_OK:
+		case C.SSPI_OK:
 			sc.contextComplete = true
-		case C.SEC_I_CONTINUE_NEEDED, C.SEC_I_COMPLETE_AND_CONTINUE:
+		case C.SSPI_CONTINUE:
 		default:
-			return nil, fmt.Errorf("failed to initialize security context: %s", statusMessage(status))
+			return nil, fmt.Errorf("unable to initialize sec context: %v", statusMessage(sc.state.status))
 		}
 	}
 
@@ -137,9 +145,9 @@ var initOnce sync.Once
 var initError error
 
 func initSSPI() {
-	rc := C.load_secur32_dll()
+	rc := C.sspi_init()
 	if rc != 0 {
-		initError = fmt.Errorf("error loading libraries: %v", rc)
+		initError = fmt.Errorf("error initializing sspi: %v", rc)
 	}
 }
 
@@ -147,9 +155,9 @@ func statusMessage(status C.SECURITY_STATUS) string {
 	var s string
 	switch status {
 	case C.SEC_E_ALGORITHM_MISMATCH:
-		s = "The SaslClient and server cannot communicate because they do not possess a common algorithm."
+		s = "The client and server cannot communicate because they do not possess a common algorithm."
 	case C.SEC_E_BAD_BINDINGS:
-		s = "The SSPI channel bindings supplied by the SaslClient are incorrect."
+		s = "The SSPI channel bindings supplied by the client are incorrect."
 	case C.SEC_E_BAD_PKGID:
 		s = "The requested package identifier does not exist."
 	case C.SEC_E_BUFFER_TOO_SMALL:
@@ -231,7 +239,7 @@ func statusMessage(status C.SECURITY_STATUS) string {
 	case C.SEC_E_NO_S4U_PROT_SUPPORT:
 		s = "The Kerberos subsystem encountered an error. A service for user protocol request was made against a domain controller which does not support service for a user."
 	case C.SEC_E_NO_TGT_REPLY:
-		s = "The SaslClient is trying to negotiate a context and the server requires a user-to-user connection"
+		s = "The client is trying to negotiate a context and the server requires a user-to-user connection"
 	case C.SEC_E_NOT_OWNER:
 		s = "The caller of the function does not own the credentials."
 	case C.SEC_E_OK:
@@ -241,7 +249,7 @@ func statusMessage(status C.SECURITY_STATUS) string {
 	case C.SEC_E_PKINIT_CLIENT_FAILURE:
 		s = "The smart card certificate used for authentication is not trusted."
 	case C.SEC_E_PKINIT_NAME_MISMATCH:
-		s = "The SaslClient certificate does not contain a valid UPN or does not match the SaslClient name in the logon request."
+		s = "The client certificate does not contain a valid UPN or does not match the client name in the logon request."
 	case C.SEC_E_QOP_NOT_SUPPORTED:
 		s = "The quality of protection attribute is not supported by this package."
 	case C.SEC_E_REVOCATION_OFFLINE_C:
@@ -265,7 +273,7 @@ func statusMessage(status C.SECURITY_STATUS) string {
 	case C.SEC_E_TARGET_UNKNOWN:
 		s = "The target was not recognized."
 	case C.SEC_E_TIME_SKEW:
-		s = "The clocks on the SaslClient and server computers do not match."
+		s = "The clocks on the client and server computers do not match."
 	case C.SEC_E_TOO_MANY_PRINCIPALS:
 		s = "The KDC reply contained more than one principal name."
 	case C.SEC_E_UNFINISHED_CONTEXT_DELETED:

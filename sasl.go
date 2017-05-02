@@ -19,7 +19,7 @@ func (m *saslMechanism) Next(challenge []byte) ([]byte, error) {
 			client := m.clientFactory()
 			m.clients = append(m.clients, client)
 
-			payload, err := client.Start()
+			_, payload, err := client.Start()
 			if err != nil {
 				return nil, err
 			}
@@ -61,7 +61,7 @@ func (m *saslMechanism) Next(challenge []byte) ([]byte, error) {
 }
 
 type saslClient interface {
-	Start() ([]byte, error)
+	Start() (string, []byte, error)
 	Next(challenge []byte) ([]byte, error)
 	Completed() bool
 }

@@ -9,7 +9,7 @@ import (
 )
 
 func TestScramSha1(t *testing.T) {
-	db, err := sql.Open("mysql", "blah")
+	db, err := sql.Open("mysql", "jack:pass@tcp(localhost:3307)/test")
 	if err != nil {
 		t.Fatalf("unable to connect")
 	}

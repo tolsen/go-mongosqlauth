@@ -32,14 +32,15 @@ type scramSaslClient struct {
 	serverSignature        []byte
 }
 
-func (c *scramSaslClient) Start() ([]byte, error) {
+func (c *scramSaslClient) Start() (string, []byte, error) {
+	const mechName = "SCRAM-SHA-1"
 	if err := c.generateClientNonce(scramSHA1NonceLen); err != nil {
-		return nil, err
+		return mechName, nil, err
 	}
 
 	c.clientFirstMessageBare = "n=" + usernameSanitizer.Replace(c.username) + ",r=" + string(c.clientNonce)
 
-	return []byte("n,," + c.clientFirstMessageBare), nil
+	return mechName, []byte("n,," + c.clientFirstMessageBare), nil
 }
 
 func (c *scramSaslClient) Next(challenge []byte) ([]byte, error) {

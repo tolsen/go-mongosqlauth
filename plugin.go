@@ -59,7 +59,7 @@ func (p *plugin) Next(challenge []byte) ([]byte, error) {
 	nConvos := int(bytesToUint32(challenge[mechEnd+1 : mechEnd+5]))
 	pos += 4
 
-	username, err := p.parseUsername()
+	username, props, err := p.parseUsername()
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (p *plugin) Next(challenge []byte) ([]byte, error) {
 			nConvos: nConvos,
 
 			clientFactory: func() saslClient {
-				return gssapiClientFactory(username, p.cfg)
+				return gssapiClientFactory(username, props, p.cfg)
 			},
 		}
 	case "SCRAM-SHA-1":
@@ -102,7 +102,7 @@ func (p *plugin) Next(challenge []byte) ([]byte, error) {
 	return p.mech.Next(nil)
 }
 
-func (p *plugin) parseUsername() (username string, err error) {
+func (p *plugin) parseUsername() (username string, props map[string]string, err error) {
 	username = p.cfg.User
 
 	// parse user for extra information other than just the username
@@ -110,7 +110,30 @@ func (p *plugin) parseUsername() (username string, err error) {
 	// as a query string, so everything should be url encoded.
 	idx := strings.Index(username, "?")
 	if idx > 0 {
-		return url.QueryUnescape(p.cfg.User[:idx])
+		username, err = url.QueryUnescape(p.cfg.User[:idx])
+		if err != nil {
+			return
+		}
+		var values url.Values
+		values, err = url.ParseQuery(p.cfg.User[idx+1:])
+		if err != nil {
+			return
+		}
+		for key, value := range values {
+			switch strings.ToLower(key) {
+			case "mechanismProperties":
+				props = make(map[string]string)
+				pairs := strings.Split(value[0], ",")
+				for _, pair := range pairs {
+					kv := strings.SplitN(pair, ":", 2)
+					if len(kv) != 2 || kv[0] == "" {
+						err = fmt.Errorf("invalid mechanism property")
+						return
+					}
+					props[kv[0]] = kv[1]
+				}
+			}
+		}
 	}
 
 	return
