@@ -9,7 +9,6 @@ type saslMechanism struct {
 }
 
 func (m *saslMechanism) Next(challenge []byte) ([]byte, error) {
-
 	var data []byte
 
 	if len(m.clients) == 0 {
@@ -42,6 +41,7 @@ func (m *saslMechanism) Next(challenge []byte) ([]byte, error) {
 		payloadLen := int(bytesToUint32(challenge[pos : pos+4]))
 		pos += 4
 		payload := challenge[pos : pos+payloadLen]
+		pos += payloadLen
 
 		payload, err = m.clients[i].Next(payload)
 		if err != nil {
