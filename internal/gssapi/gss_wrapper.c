@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include "gss_wrapper.h"
 
-OM_uint32 gssapi_canonicalize_name(
+OM_uint32 gssapi_canonicalize_name2(
     OM_uint32* minor_status, 
     char *input_name, 
     gss_OID input_name_type, 
@@ -32,7 +32,7 @@ OM_uint32 gssapi_canonicalize_name(
     return major_status;
 }
 
-int gssapi_error_desc(
+int gssapi_error_desc2(
     OM_uint32 maj_stat, 
     OM_uint32 min_stat, 
     char **desc
@@ -59,7 +59,7 @@ int gssapi_error_desc(
             &desc_buffer
         );
         if (GSS_ERROR(local_maj_stat)) {
-            return GSSAPI_ERROR;
+            return GSSAPI_ERROR_2;
         }
 
         if (*desc) {
@@ -73,11 +73,11 @@ int gssapi_error_desc(
     }
     while(msg_ctx != 0);
 
-    return GSSAPI_OK;
+    return GSSAPI_OK_2;
 }
 
-int gssapi_client_init(
-    gssapi_client_state *client,
+int gssapi_client_init2(
+    gssapi_client_state2 *client,
     char* spn,
     char* username,
     char* password
@@ -86,16 +86,16 @@ int gssapi_client_init(
     client->cred = GSS_C_NO_CREDENTIAL;
     client->ctx = GSS_C_NO_CONTEXT;
 
-    client->maj_stat = gssapi_canonicalize_name(&client->min_stat, spn, GSS_C_NT_HOSTBASED_SERVICE, &client->spn);
+    client->maj_stat = gssapi_canonicalize_name2(&client->min_stat, spn, GSS_C_NT_HOSTBASED_SERVICE, &client->spn);
     if (GSS_ERROR(client->maj_stat)) {
-        return GSSAPI_ERROR;
+        return GSSAPI_ERROR_2;
     }
 
     if (username) {
         gss_name_t name;
-        client->maj_stat = gssapi_canonicalize_name(&client->min_stat, username, GSS_C_NT_USER_NAME, &name);
+        client->maj_stat = gssapi_canonicalize_name2(&client->min_stat, username, GSS_C_NT_USER_NAME, &name);
         if (GSS_ERROR(client->maj_stat)) {
-            return GSSAPI_ERROR;
+            return GSSAPI_ERROR_2;
         }
 
         if (password) {
@@ -108,18 +108,18 @@ int gssapi_client_init(
         }
 
         if (GSS_ERROR(client->maj_stat)) {
-            return GSSAPI_ERROR;
+            return GSSAPI_ERROR_2;
         }
 
         OM_uint32 ignored;
         gss_release_name(&ignored, &name);
     }
 
-    return GSSAPI_OK;
+    return GSSAPI_OK_2;
 }
 
-int gssapi_client_username(
-    gssapi_client_state *client,
+int gssapi_client_username2(
+    gssapi_client_state2 *client,
     char** username
 )
 {
@@ -128,14 +128,14 @@ int gssapi_client_username(
 
     client->maj_stat = gss_inquire_context(&client->min_stat, client->ctx, &name, NULL, NULL, NULL, NULL, NULL, NULL);
     if (GSS_ERROR(client->maj_stat)) {
-        return GSSAPI_ERROR;
+        return GSSAPI_ERROR_2;
     }
 
     gss_buffer_desc name_buffer;
     client->maj_stat = gss_display_name(&client->min_stat, name, &name_buffer, NULL);
     if (GSS_ERROR(client->maj_stat)) {
         gss_release_name(&ignored, &name);
-        return GSSAPI_ERROR;
+        return GSSAPI_ERROR_2;
     }
 
 	*username = malloc(name_buffer.length+1);
@@ -143,11 +143,11 @@ int gssapi_client_username(
 
     gss_release_buffer(&ignored, &name_buffer);
     gss_release_name(&ignored, &name);
-    return GSSAPI_OK;
+    return GSSAPI_OK_2;
 }
 
-int gssapi_client_negotiate(
-    gssapi_client_state *client,
+int gssapi_client_negotiate2(
+    gssapi_client_state2 *client,
     void* input,
     size_t input_length,
     void** output,
@@ -188,16 +188,16 @@ int gssapi_client_negotiate(
     }
 
     if (GSS_ERROR(client->maj_stat)) {
-        return GSSAPI_ERROR;
+        return GSSAPI_ERROR_2;
     } else if (client->maj_stat == GSS_S_CONTINUE_NEEDED) {
-        return GSSAPI_CONTINUE;
+        return GSSAPI_CONTINUE_2;
     }
 
-    return GSSAPI_OK;
+    return GSSAPI_OK_2;
 }
 
-int gssapi_client_wrap_msg(
-    gssapi_client_state *client,
+int gssapi_client_wrap_msg2(
+    gssapi_client_state2 *client,
     void* input,
     size_t input_length,
     void** output,
@@ -221,14 +221,14 @@ int gssapi_client_wrap_msg(
     }
 
     if (GSS_ERROR(client->maj_stat)) {
-        return GSSAPI_ERROR;
+        return GSSAPI_ERROR_2;
     }
 
-    return GSSAPI_OK;
+    return GSSAPI_OK_2;
 }
 
-int gssapi_client_destroy(
-    gssapi_client_state *client
+int gssapi_client_destroy2(
+    gssapi_client_state2 *client
 )
 {
     OM_uint32 ignored;
@@ -244,5 +244,5 @@ int gssapi_client_destroy(
         gss_release_cred(&ignored, &client->cred);
     }
 
-    return GSSAPI_OK;
+    return GSSAPI_OK_2;
 }

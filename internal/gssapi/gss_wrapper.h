@@ -12,9 +12,9 @@
 #include <GSS/GSS.h>
 #endif
 
-#define GSSAPI_OK 0
-#define GSSAPI_CONTINUE 1
-#define GSSAPI_ERROR 2
+#define GSSAPI_OK_2 0
+#define GSSAPI_CONTINUE_2 1
+#define GSSAPI_ERROR_2 2
 
 typedef struct {
     gss_name_t spn;
@@ -23,44 +23,44 @@ typedef struct {
 
     OM_uint32 maj_stat;
     OM_uint32 min_stat;
-} gssapi_client_state;
+} gssapi_client_state2;
 
-int gssapi_error_desc(
+int gssapi_error_desc2(
     OM_uint32 maj_stat, 
     OM_uint32 min_stat, 
     char **desc
 );
 
-int gssapi_client_init(
-    gssapi_client_state *client,
+int gssapi_client_init2(
+    gssapi_client_state2 *client,
     char* spn,
     char* username,
     char* password
 );
 
-int gssapi_client_username(
-    gssapi_client_state *client,
+int gssapi_client_username2(
+    gssapi_client_state2 *client,
     char** username
 );
 
-int gssapi_client_negotiate(
-    gssapi_client_state *client,
+int gssapi_client_negotiate2(
+    gssapi_client_state2 *client,
     void* input,
     size_t input_length,
     void** output,
     size_t* output_length
 );
 
-int gssapi_client_wrap_msg(
-    gssapi_client_state *client,
+int gssapi_client_wrap_msg2(
+    gssapi_client_state2 *client,
     void* input,
     size_t input_length,
     void** output,
     size_t* output_length 
 );
 
-int gssapi_client_destroy(
-    gssapi_client_state *client
+int gssapi_client_destroy2(
+    gssapi_client_state2 *client
 );
 
 #endif

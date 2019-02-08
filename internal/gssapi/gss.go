@@ -43,13 +43,13 @@ type SaslClient struct {
 	passwordSet          bool
 
 	// state
-	state           C.gssapi_client_state
+	state           C.gssapi_client_state2
 	contextComplete bool
 	done            bool
 }
 
 func (sc *SaslClient) Close() {
-	C.gssapi_client_destroy(&sc.state)
+	C.gssapi_client_destroy2(&sc.state)
 }
 
 func (sc *SaslClient) Start() (string, []byte, error) {
@@ -67,9 +67,9 @@ func (sc *SaslClient) Start() (string, []byte, error) {
 			defer C.free(unsafe.Pointer(cpassword))
 		}
 	}
-	status := C.gssapi_client_init(&sc.state, cservicePrincipalName, cusername, cpassword)
+	status := C.gssapi_client_init2(&sc.state, cservicePrincipalName, cusername, cpassword)
 
-	if status != C.GSSAPI_OK {
+	if status != C.GSSAPI_OK_2 {
 		return mechName, nil, sc.getError("unable to initialize client")
 	}
 
@@ -86,8 +86,8 @@ func (sc *SaslClient) Next(challenge []byte) ([]byte, error) {
 	if sc.contextComplete {
 		if sc.username == "" {
 			var cusername *C.char
-			status := C.gssapi_client_username(&sc.state, &cusername)
-			if status != C.GSSAPI_OK {
+			status := C.gssapi_client_username2(&sc.state, &cusername)
+			if status != C.GSSAPI_OK_2 {
 				return nil, sc.getError("unable to acquire username")
 			}
 			defer C.free(unsafe.Pointer(cusername))
@@ -97,8 +97,8 @@ func (sc *SaslClient) Next(challenge []byte) ([]byte, error) {
 		bytes := append([]byte{1, 0, 0, 0}, []byte(sc.username)...)
 		buf = unsafe.Pointer(&bytes[0])
 		bufLen = C.size_t(len(bytes))
-		status := C.gssapi_client_wrap_msg(&sc.state, buf, bufLen, &outBuf, &outBufLen)
-		if status != C.GSSAPI_OK {
+		status := C.gssapi_client_wrap_msg2(&sc.state, buf, bufLen, &outBuf, &outBufLen)
+		if status != C.GSSAPI_OK_2 {
 			return nil, sc.getError("unable to wrap authz")
 		}
 
@@ -109,11 +109,11 @@ func (sc *SaslClient) Next(challenge []byte) ([]byte, error) {
 			bufLen = C.size_t(len(challenge))
 		}
 
-		status := C.gssapi_client_negotiate(&sc.state, buf, bufLen, &outBuf, &outBufLen)
+		status := C.gssapi_client_negotiate2(&sc.state, buf, bufLen, &outBuf, &outBufLen)
 		switch status {
-		case C.GSSAPI_OK:
+		case C.GSSAPI_OK_2:
 			sc.contextComplete = true
-		case C.GSSAPI_CONTINUE:
+		case C.GSSAPI_CONTINUE_2:
 		default:
 			return nil, sc.getError("unable to negotiate with server")
 		}
@@ -133,8 +133,8 @@ func (sc *SaslClient) Completed() bool {
 func (sc *SaslClient) getError(prefix string) error {
 	var desc *C.char
 
-	status := C.gssapi_error_desc(sc.state.maj_stat, sc.state.min_stat, &desc)
-	if status != C.GSSAPI_OK {
+	status := C.gssapi_error_desc2(sc.state.maj_stat, sc.state.min_stat, &desc)
+	if status != C.GSSAPI_OK_2 {
 		if desc != nil {
 			C.free(unsafe.Pointer(desc))
 		}
