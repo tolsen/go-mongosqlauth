@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/10gen/go-mongosqlauth/internal/gssapi"
 	"github.com/go-sql-driver/mysql"
+	"github.com/tolsen/go-mongosqlauth/internal/gssapi"
 )
 
 func gssapiClientFactory(username string, props map[string]string, cfg *mysql.Config) saslClient {
