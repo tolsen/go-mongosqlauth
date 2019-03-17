@@ -1,4 +1,4 @@
-//+build gssapi,windows
+//+build gssapi2,windows
 
 package gssapi
 

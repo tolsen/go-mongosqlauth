@@ -1,4 +1,4 @@
-//+build gssapi
+//+build gssapi2
 //+build windows linux darwin
 
 package mongosqlauth
