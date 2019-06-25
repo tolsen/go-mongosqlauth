@@ -73,14 +73,15 @@ func (p *plugin) Next(challenge []byte) ([]byte, error) {
 				return gssapiClientFactory(username, props, p.cfg)
 			},
 		}
-	case "SCRAM-SHA-1":
+	case "SCRAM-SHA-1", "SCRAM-SHA-256":
 		p.mech = &saslMechanism{
 			nConvos: nConvos,
 
 			clientFactory: func() saslClient {
 				return &scramSaslClient{
-					username: username,
-					password: p.cfg.Passwd,
+					username:  username,
+					password:  p.cfg.Passwd,
+					mechanism: mechanism,
 				}
 			},
 		}
