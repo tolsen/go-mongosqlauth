@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log"
 
-	_ "github.com/10gen/go-mongosqlauth"
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/tolsen/go-mongosqlauth"
 )
 
 var dsn = flag.String("dsn", "client%40WHOME.LOCAL?mechanism=GSSAPI:password@tcp(sikai.whome.local.net:3307)/test", "")

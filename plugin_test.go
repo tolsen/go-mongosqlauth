@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"testing"
 
-	_ "github.com/10gen/go-mongosqlauth"
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/tolsen/go-mongosqlauth"
 )
 
 func TestScramSha1(t *testing.T) {
