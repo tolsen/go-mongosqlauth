@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha1"
+	"crypto/sha256"
 	"fmt"
+	"hash"
 	"io"
 	"math/rand"
 	"strconv"
@@ -19,11 +21,12 @@ import (
 // SCRAMSHA1 is the mechanism name for SCRAM-SHA-1.
 const scramSHA1NonceLen = 24
 
-var usernameSanitizer = strings.NewReplacer("=", "=3D", ",", "=2D")
+var usernameSanitizer = strings.NewReplacer("=", "=3D", ",", "=2C")
 
 type scramSaslClient struct {
 	username       string
 	password       string
+	mechanism      string
 	nonceGenerator func([]byte) error
 
 	step                   uint8
@@ -33,14 +36,13 @@ type scramSaslClient struct {
 }
 
 func (c *scramSaslClient) Start() (string, []byte, error) {
-	const mechName = "SCRAM-SHA-1"
 	if err := c.generateClientNonce(scramSHA1NonceLen); err != nil {
-		return mechName, nil, err
+		return c.mechanism, nil, err
 	}
 
 	c.clientFirstMessageBare = "n=" + usernameSanitizer.Replace(c.username) + ",r=" + string(c.clientNonce)
 
-	return mechName, []byte("n,," + c.clientFirstMessageBare), nil
+	return c.mechanism, []byte("n,," + c.clientFirstMessageBare), nil
 }
 
 func (c *scramSaslClient) Next(challenge []byte) ([]byte, error) {
@@ -91,9 +93,23 @@ func (c *scramSaslClient) step1(challenge []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid iteration count")
 	}
 
+	if c.mechanism == "SCRAM-SHA-256" && i < 4096 {
+		return nil, fmt.Errorf("server returned an invalid iteration count")
+	}
+
+	var saltedPassword []byte
+	if c.mechanism == "SCRAM-SHA-1" {
+		saltedPassword = pbkdf2.Key([]byte(mongoPasswordDigest(c.username, c.password)), s, i, 20, sha1.New)
+	} else {
+		// SHA-256
+		saltedPassword, err = c.saltSha256Password(s, i)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	clientFinalMessageWithoutProof := "c=biws,r=" + string(r)
 	authMessage := c.clientFirstMessageBare + "," + string(challenge) + "," + clientFinalMessageWithoutProof
-	saltedPassword := pbkdf2.Key([]byte(mongoPasswordDigest(c.username, c.password)), s, i, 20, sha1.New)
 	clientKey := c.hmac(saltedPassword, "Client Key")
 	storedKey := c.h(clientKey)
 	clientSignature := c.hmac(storedKey, authMessage)
@@ -135,6 +151,33 @@ func (c *scramSaslClient) step2(challenge []byte) ([]byte, error) {
 	return nil, nil
 }
 
+func (c *scramSaslClient) saltSha256Password(salt []byte, iterCount int) ([]byte, error) {
+	mac := hmac.New(sha256.New, []byte(c.password))
+	_, err := mac.Write(salt)
+	if err != nil {
+		return nil, err
+	}
+	_, err = mac.Write([]byte{0, 0, 0, 1})
+	if err != nil {
+		return nil, err
+	}
+	ui := mac.Sum(nil)
+	hi := make([]byte, len(ui))
+	copy(hi, ui)
+	for i := 1; i < iterCount; i++ {
+		mac.Reset()
+		_, err = mac.Write(ui)
+		if err != nil {
+			return nil, err
+		}
+		mac.Sum(ui[:0])
+		for j, b := range ui {
+			hi[j] ^= b
+		}
+	}
+	return hi, nil
+}
+
 func (c *scramSaslClient) generateClientNonce(n uint8) error {
 	if c.nonceGenerator != nil {
 		c.clientNonce = make([]byte, n)
@@ -150,13 +193,13 @@ func (c *scramSaslClient) generateClientNonce(n uint8) error {
 }
 
 func (c *scramSaslClient) h(data []byte) []byte {
-	h := sha1.New()
+	h := c.getHashFunction()()
 	h.Write(data)
 	return h.Sum(nil)
 }
 
 func (c *scramSaslClient) hmac(data []byte, key string) []byte {
-	h := hmac.New(sha1.New, data)
+	h := hmac.New(c.getHashFunction(), data)
 	io.WriteString(h, key)
 	return h.Sum(nil)
 }
@@ -167,4 +210,11 @@ func (c *scramSaslClient) xor(a []byte, b []byte) []byte {
 		result[i] = a[i] ^ b[i]
 	}
 	return result
+}
+
+func (c *scramSaslClient) getHashFunction() func() hash.Hash {
+	if c.mechanism == "SCRAM-SHA-1" {
+		return sha1.New
+	}
+	return sha256.New
 }
